@@ -52,6 +52,34 @@ The wizard offers three choices for the Lambda functions the flows use:
 - **A test phone number** in +E.164 format, such as a number claimed on the target instance.
 - **Optional:** an S3 bucket in the target account for copying prompt audio, and for keeping a durable copy of the backups.
 
+## Set up the source role (source in another account)
+
+Do this once, in the **source** (production) account. It creates a read-only role that the target account can assume.
+
+1. Sign in to the **source** account and open **CloudShell**.
+2. Run this, replacing `<TARGET_ACCOUNT_ID>` with the 12-digit ID of the account that holds the target instance:
+   ```bash
+   aws iam create-role --role-name ConnectSyncReadOnly --max-session-duration 3600 \
+     --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::<TARGET_ACCOUNT_ID>:root"},"Action":"sts:AssumeRole"}]}' \
+     --query Role.Arn --output text
+   aws iam attach-role-policy --role-name ConnectSyncReadOnly --policy-arn arn:aws:iam::aws:policy/AmazonConnectReadOnlyAccess
+   ```
+3. **Only if you will use Lambda copy mode,** also attach:
+   ```bash
+   for p in AWSLambda_ReadOnlyAccess IAMReadOnlyAccess AmazonDynamoDBReadOnlyAccess AmazonEventBridgeReadOnlyAccess; do
+     aws iam attach-role-policy --role-name ConnectSyncReadOnly --policy-arn arn:aws:iam::aws:policy/$p
+   done
+   ```
+4. Note the role ARN the first command printed (`arn:aws:iam::<SOURCE_ACCOUNT_ID>:role/ConnectSyncReadOnly`). The wizard asks for it.
+
+Your security team may prefer a narrower trust than the whole target account: for example, only the target account's Identity Center administrator role, or an `sts:ExternalId` condition (the wizard asks for an external ID). Remove the role when you no longer need it:
+```bash
+for p in $(aws iam list-attached-role-policies --role-name ConnectSyncReadOnly --query 'AttachedPolicies[].PolicyArn' --output text); do
+  aws iam detach-role-policy --role-name ConnectSyncReadOnly --policy-arn $p
+done
+aws iam delete-role --role-name ConnectSyncReadOnly
+```
+
 ## Run it
 
 1. Open the AWS console in the target account and region, then open **CloudShell** (the `>_` icon in the top bar).
@@ -61,7 +89,7 @@ The wizard offers three choices for the Lambda functions the flows use:
    python3 connect_sync.py
    ```
    No internet access from CloudShell? Download `connect_sync.py` from this repo, then use **Actions → Upload file** in CloudShell.
-4. Choose **Sync**, then follow the prompts: source location, source instance, target instance, test number and options.
+4. Choose **Sync**, then follow the prompts: source location (for another account, give the role ARN from the step above), source instance, target instance, test number and options.
 5. Read the plan. To apply it, type the **target alias** when asked. Anything else cancels, and nothing changes.
 
 ## Backups and restore
