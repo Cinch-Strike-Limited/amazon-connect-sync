@@ -38,7 +38,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError, ParamValidationError
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 RETRY = Config(retries={"max_attempts": 10, "mode": "adaptive"})
 BACKUP_ROOT = os.path.expanduser("~/connect-sync-backups")
 PLACEHOLDER = "<new "
@@ -1164,7 +1164,9 @@ def save_backup(tgt_snap, label):
 def offer_s3_copy(account, folder):
     if not yes("Also copy the backup to S3? (CloudShell storage is removed after 120 days without use)", True):
         return
-    bucket = ask("S3 bucket name", required=True)
+    bucket = ask("S3 bucket name (Enter to skip)")
+    if not bucket:
+        return
     s3 = account.client("s3")
     prefix = f"connect-sync-backups/{os.path.basename(folder)}"
     try:
